@@ -8,9 +8,11 @@ import type {
   SequencePuzzleData
 } from '../PuzzleTypes';
 
-const ACCENT = '#57D3C8';
-const GOLD = '#F1C66A';
-const MUTED = '#6F7A8C';
+const ACCENT = '#4ED8CA';
+const GOLD = '#F0BF59';
+const MUTED = '#637184';
+const NODE_BG = '#172132';
+const NODE_TEXT = '#F8FBFF';
 
 export class PuzzleScene {
   private readonly engine: ThreeRenderer;
@@ -78,7 +80,7 @@ export class PuzzleScene {
         this.engine.scene.add(sprite);
         this.animated.push(sprite);
         if (index < row.length - 1) {
-          this.addLine([startX + index * gap + 0.38, y], [startX + (index + 1) * gap - 0.38, y], MUTED);
+          this.addLine([startX + index * gap + 0.5, y], [startX + (index + 1) * gap - 0.5, y], MUTED);
         }
       });
     });
@@ -94,15 +96,15 @@ export class PuzzleScene {
     const top = height / 2;
 
     for (let row = 0; row <= rows; row += 1) {
-      this.addLine([left, top - row * cell], [left + width, top - row * cell], MUTED);
+      this.addLine([left, top - row * cell], [left + width, top - row * cell], MUTED, 0.028);
     }
     for (let column = 0; column <= columns; column += 1) {
-      this.addLine([left + column * cell, top], [left + column * cell, top - height], MUTED);
+      this.addLine([left + column * cell, top], [left + column * cell, top - height], MUTED, 0.028);
     }
 
     data.cells.forEach((row, rowIndex) => {
       row.forEach((value, columnIndex) => {
-        const sprite = this.nodeSprite(value === null ? '?' : String(value), value === null, 0.72);
+        const sprite = this.nodeSprite(value === null ? '?' : String(value), value === null, 0.62);
         sprite.position.set(left + (columnIndex + 0.5) * cell, top - (rowIndex + 0.5) * cell, 0);
         this.engine.scene.add(sprite);
       });
@@ -116,12 +118,12 @@ export class PuzzleScene {
     const top = size / 2;
 
     for (let index = 0; index <= data.gridSize; index += 1) {
-      this.addLine([left, top - index * cell], [left + size, top - index * cell], ACCENT, 0.045);
-      this.addLine([left + index * cell, top], [left + index * cell, top - size], ACCENT, 0.045);
+      this.addLine([left, top - index * cell], [left + size, top - index * cell], ACCENT, 0.04);
+      this.addLine([left + index * cell, top], [left + index * cell, top - size], ACCENT, 0.04);
     }
     if (data.includeDiagonals) {
-      this.addLine([left, top], [left + size, top - size], GOLD, 0.055);
-      this.addLine([left + size, top], [left, top - size], GOLD, 0.055);
+      this.addLine([left, top], [left + size, top - size], GOLD, 0.05);
+      this.addLine([left + size, top], [left, top - size], GOLD, 0.05);
     }
   }
 
@@ -131,7 +133,7 @@ export class PuzzleScene {
       const curve = new THREE.EllipseCurve(circle.x, circle.y, circle.radius, circle.radius, 0, Math.PI * 2);
       const points = curve.getPoints(96).map((point) => new THREE.Vector3(point.x, point.y, 0));
       const geometry = new THREE.BufferGeometry().setFromPoints(points);
-      this.engine.scene.add(new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: MUTED })));
+      this.engine.scene.add(new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: MUTED, transparent: true, opacity: 0.88 })));
     });
     data.rects?.forEach((rect) => {
       const x = rect.x - rect.width / 2;
@@ -143,12 +145,17 @@ export class PuzzleScene {
     });
     data.labels.forEach((label) => {
       const isMissing = label.style === 'missing';
+      const isBoxed = label.style === 'node' || isMissing;
       const sprite = this.engine.createTextSprite(label.text, {
-        color: isMissing ? GOLD : '#F6F7F9',
-        background: label.style === 'node' || isMissing ? '#202735' : undefined,
-        border: isMissing ? GOLD : label.style === 'node' ? '#57D3C8' : undefined,
-        fontSize: label.style === 'small' ? 42 : 58,
-        scale: label.style === 'small' ? 0.62 : label.style === 'symbol' ? 0.82 : 0.76
+        color: isMissing ? GOLD : NODE_TEXT,
+        background: isBoxed ? NODE_BG : undefined,
+        border: isMissing ? GOLD : label.style === 'node' ? ACCENT : undefined,
+        fontSize: label.style === 'small' ? 42 : isBoxed ? 60 : 58,
+        fontWeight: isBoxed ? 850 : 700,
+        padding: isBoxed ? 0 : 20,
+        boxWidth: isBoxed ? 118 : undefined,
+        boxHeight: isBoxed ? 96 : undefined,
+        scale: label.style === 'small' ? 0.58 : label.style === 'symbol' ? 0.78 : isBoxed ? 0.68 : 0.76
       });
       sprite.position.set(label.x, label.y, 0.02);
       this.engine.scene.add(sprite);
@@ -156,11 +163,16 @@ export class PuzzleScene {
     });
   }
 
-  private nodeSprite(text: string, missing: boolean, scale = 0.82): THREE.Sprite {
+  private nodeSprite(text: string, missing: boolean, scale = 0.68): THREE.Sprite {
     return this.engine.createTextSprite(text, {
-      color: missing ? GOLD : '#F6F7F9',
-      background: '#202735',
+      color: missing ? GOLD : NODE_TEXT,
+      background: NODE_BG,
       border: missing ? GOLD : ACCENT,
+      fontSize: 60,
+      fontWeight: 850,
+      padding: 0,
+      boxWidth: 118,
+      boxHeight: 96,
       scale
     });
   }
@@ -169,14 +181,14 @@ export class PuzzleScene {
     from: [number, number],
     to: [number, number],
     color: string,
-    width = 0.035
+    width = 0.03
   ): void {
     const start = new THREE.Vector2(...from);
     const end = new THREE.Vector2(...to);
     const delta = end.clone().sub(start);
     const length = delta.length();
     const geometry = new THREE.PlaneGeometry(length, width);
-    const material = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9 });
+    const material = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.82 });
     const mesh = new THREE.Mesh(geometry, material);
     mesh.position.set((from[0] + to[0]) / 2, (from[1] + to[1]) / 2, -0.02);
     mesh.rotation.z = Math.atan2(delta.y, delta.x);
