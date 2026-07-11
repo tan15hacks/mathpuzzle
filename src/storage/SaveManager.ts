@@ -2,15 +2,17 @@ import type { GameSave } from './SaveTypes';
 
 const STORAGE_KEY = 'number-nexus-save';
 const SCHEMA_VERSION = 2 as const;
+const APP_VERSION = '1.1.0';
+const FIRST_CATEGORY_LEVEL = 'category-sequences-level-1';
 
 export function createDefaultSave(now = new Date()): GameSave {
   const timestamp = now.toISOString();
   return {
     schemaVersion: SCHEMA_VERSION,
-    appVersion: '1.0.0',
+    appVersion: APP_VERSION,
     levels: {},
     hintTokens: 6,
-    lastPlayedLevel: 'chapter-1-level-1',
+    lastPlayedLevel: FIRST_CATEGORY_LEVEL,
     dailyCompletedDates: [],
     dailyRewardDates: [],
     currentStreak: 0,
@@ -70,8 +72,9 @@ export function migrateSave(raw: unknown): GameSave {
     ...defaults,
     ...legacy,
     schemaVersion: SCHEMA_VERSION,
-    appVersion: '1.0.0',
+    appVersion: APP_VERSION,
     levels: migratedLevels,
+    lastPlayedLevel: legacy.lastPlayedLevel ?? FIRST_CATEGORY_LEVEL,
     settings: { ...defaults.settings, ...legacy.settings },
     statistics: { ...defaults.statistics, ...legacy.statistics },
     dailyCompletedDates: [...new Set(legacy.dailyCompletedDates ?? [])],

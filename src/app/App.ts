@@ -1,5 +1,7 @@
+import { MockRewardedAdProvider, type AdPlacement } from '../monetization/RewardedAds';
 import { AudioManager } from '../core/AudioManager';
 import { HapticsManager } from '../core/HapticsManager';
+import { difficultyLabel, LEVELS_PER_CATEGORY, MAX_STARS } from '../puzzles/data/generatedCategories';
 import { calculateStreak, dailyPuzzleId, localDateKey } from '../progression/DailyPuzzleManager';
 import {
   chapterProgress,
@@ -37,6 +39,7 @@ export class NumberNexusApp {
   private readonly saves = new SaveManager();
   private readonly audio = new AudioManager();
   private readonly haptics = new HapticsManager();
+  private readonly ads = new MockRewardedAdProvider();
   private readonly lifecycle = new AppLifecycle();
   private scene: PuzzleScene | null = null;
   private session: Session | null = null;
@@ -46,6 +49,7 @@ export class NumberNexusApp {
 
   async start(): Promise<void> {
     this.applySettings(this.saves.get());
+    await this.ads.initialize();
     this.render({ screen: 'splash' });
     await this.lifecycle.connect({
       onBack: () => this.back(),
@@ -82,7 +86,7 @@ export class NumberNexusApp {
       case 'splash': this.splash(); break;
       case 'menu': this.menu(); break;
       case 'chapters': this.chapters(); break;
-      case 'levels': this.levels(route.chapterId ?? 'chapter-1'); break;
+      case 'levels': this.levels(route.chapterId ?? PuzzleRegistry.chapters()[0]!.id); break;
       case 'puzzle': this.puzzle(route.puzzleId ?? PuzzleRegistry.first().id, Boolean(route.daily), resume); break;
       case 'daily': this.go({ screen: 'puzzle', puzzleId: dailyPuzzleId(), daily: true }, true); break;
       case 'progress': this.progress(); break;
@@ -94,7 +98,7 @@ export class NumberNexusApp {
 
   private splash(): void {
     const main = element('main', 'screen splash-screen');
-    main.innerHTML = '<div class="brand-mark"><span>+</span></div><h1>Number Nexus</h1><p>Connect the pattern.</p><div class="loading-dots" aria-label="Loading"><i></i><i></i><i></i></div>';
+    main.innerHTML = '<div class="brand-mark"><span>+</span></div><h1>Number Nexus</h1><p>Choose your puzzle style.</p><div class="loading-dots" aria-label="Loading"><i></i><i></i><i></i></div>';
     this.root.append(main);
   }
 
@@ -117,19 +121,22 @@ export class NumberNexusApp {
     const settings = iconButton('Open settings', '⚙');
     settings.addEventListener('click', () => this.go({ screen: 'settings' }));
     top.append(settings);
+
     const hero = element('section', 'hero-card');
-    hero.innerHTML = '<div class="eyebrow">YOUR NEXT CONNECTION</div><h1>Think beyond<br><em>the obvious.</em></h1><p>Original visual math puzzles designed for calm, satisfying play.</p>';
+    hero.innerHTML = '<div class="eyebrow">OPEN CATEGORIES</div><h1>Pick your<br><em>puzzle style.</em></h1><p>Six unlocked categories with 320 progressive levels each: Easy, Normal, Advanced, and Expert.</p>';
     const play = element('button', 'primary-button hero-action', 'Continue');
     play.addEventListener('click', () => this.go({ screen: 'puzzle', puzzleId: nextPlayablePuzzleId(save) }));
     hero.append(play);
+
     const stats = element('section', 'stat-strip');
     stats.innerHTML = `<div><strong>${completionPercent(save)}%</strong><span>Complete</span></div><div><strong>${totalStars(save)}</strong><span>Stars</span></div><div><strong>${save.currentStreak}</strong><span>Day streak</span></div>`;
+
     const grid = element('section', 'menu-grid');
     const entries: Array<[string, string, string, Route]> = [
-      ['Chapters', 'Explore six puzzle worlds', '◇', { screen: 'chapters' }],
-      ['Daily Puzzle', 'One fresh challenge today', '☀', { screen: 'daily' }],
+      ['Categories', 'Choose a play style', '◇', { screen: 'chapters' }],
+      ['Daily Puzzle', 'One optional challenge today', '☀', { screen: 'daily' }],
       ['Progress', 'Review stars and statistics', '◔', { screen: 'progress' }],
-      ['About', 'Credits, privacy, and game details', 'ⓘ', { screen: 'about' }]
+      ['About', 'Credits, privacy, and monetization', 'ⓘ', { screen: 'about' }]
     ];
     entries.forEach(([title, subtitle, icon, route]) => {
       const button = element('button', 'menu-tile');
@@ -142,6 +149,7 @@ export class NumberNexusApp {
       debug.addEventListener('click', () => this.go({ screen: 'debug' }));
       grid.append(debug);
     }
+
     main.append(top, hero, stats, grid);
     this.root.append(main);
   }
@@ -149,15 +157,16 @@ export class NumberNexusApp {
   private chapters(): void {
     const save = this.saves.get();
     const main = element('main', 'screen content-screen');
-    main.append(this.header('Chapters', 'Six ways to train your pattern sense'));
+    main.append(this.header('Categories', 'All play styles are unlocked from the start'));
     const list = element('section', 'chapter-list');
     PuzzleRegistry.chapters().forEach((chapter) => {
       const unlocked = isChapterUnlocked(save, chapter.id);
       const result = chapterProgress(save, chapter.id);
+      const currentDifficulty = difficultyLabel(Math.max(1, result.highestUnlocked));
       const button = element('button', `chapter-card${unlocked ? '' : ' locked'}`);
       button.disabled = !unlocked;
       button.style.setProperty('--chapter-accent', chapter.accent);
-      button.innerHTML = `<span class="chapter-icon">${unlocked ? chapter.icon : '⌁'}</span><span class="chapter-copy"><small>CHAPTER ${chapter.number}</small><strong>${chapter.title}</strong><em>${chapter.subtitle}</em></span><span class="chapter-score"><b>${result.completed}/10</b><small>${result.stars}/30 ★</small></span>`;
+      button.innerHTML = `<span class="chapter-icon">${chapter.icon}</span><span class="chapter-copy"><small>CATEGORY ${chapter.number} · ${currentDifficulty}</small><strong>${chapter.title}</strong><em>${chapter.subtitle}</em></span><span class="chapter-score"><b>${result.completed}/${chapter.puzzles.length}</b><small>${result.stars}/${chapter.puzzles.length * 3} ★</small></span>`;
       button.addEventListener('click', () => this.go({ screen: 'levels', chapterId: chapter.id }));
       list.append(button);
     });
@@ -169,20 +178,25 @@ export class NumberNexusApp {
     const chapter = PuzzleRegistry.chapter(chapterId) ?? PuzzleRegistry.chapters()[0]!;
     const save = this.saves.get();
     const main = element('main', 'screen content-screen');
-    main.append(this.header(chapter.title, chapter.subtitle));
+    main.append(this.header(chapter.title, `${LEVELS_PER_CATEGORY} progressive levels · Easy to Expert`));
     const summary = chapterProgress(save, chapter.id);
-    main.append(progressBar(summary.completed, 10, `${summary.completed} of 10 solved · ${summary.stars} stars`));
+    main.append(progressBar(summary.completed, chapter.puzzles.length, `${summary.completed} of ${chapter.puzzles.length} solved · ${summary.stars} stars`));
+
+    const legend = element('section', 'stat-strip difficulty-strip');
+    legend.innerHTML = '<div><strong>1–80</strong><span>Easy</span></div><div><strong>81–160</strong><span>Normal</span></div><div><strong>161–240</strong><span>Advanced</span></div><div><strong>241–320</strong><span>Expert</span></div>';
+
     const grid = element('section', 'level-grid');
     chapter.puzzles.forEach((item) => {
       const unlocked = isPuzzleUnlocked(save, item.id);
       const progress = getLevelProgress(save, item.id);
       const button = element('button', `level-tile${progress.completed ? ' complete' : ''}${unlocked ? '' : ' locked'}`);
       button.disabled = !unlocked;
-      button.innerHTML = `<span>${unlocked ? item.levelNumber : '⌁'}</span><small>${progress.completed ? formatStars(progress.bestStars) : unlocked ? 'Ready' : 'Locked'}</small>`;
+      button.title = `${difficultyLabel(item.levelNumber)} level ${item.levelNumber}`;
+      button.innerHTML = `<span>${unlocked ? item.levelNumber : '⌁'}</span><small>${progress.completed ? formatStars(progress.bestStars) : unlocked ? difficultyLabel(item.levelNumber) : 'Locked'}</small>`;
       button.addEventListener('click', () => this.go({ screen: 'puzzle', puzzleId: item.id }));
       grid.append(button);
     });
-    main.append(grid);
+    main.append(legend, grid);
     this.root.append(main);
   }
 
@@ -198,11 +212,13 @@ export class NumberNexusApp {
     const back = iconButton('Leave puzzle', '‹');
     back.addEventListener('click', () => this.back());
     const copy = element('div');
-    copy.innerHTML = `<small>${daily ? 'DAILY PUZZLE' : chapter?.title ?? 'NUMBER NEXUS'}</small><strong>${definition.title}</strong>`;
-    top.append(back, copy, element('span', 'level-counter', daily ? 'TODAY' : `${definition.levelNumber}/10`));
+    copy.innerHTML = `<small>${daily ? 'DAILY PUZZLE' : chapter?.title ?? 'NUMBER NEXUS'} · ${difficultyLabel(definition.levelNumber)}</small><strong>${definition.title}</strong>`;
+    top.append(back, copy, element('span', 'level-counter', daily ? 'TODAY' : `${definition.levelNumber}/${chapter?.puzzles.length ?? LEVELS_PER_CATEGORY}`));
+
     const card = element('section', 'puzzle-card');
     const host = element('div', 'three-host');
     card.append(host);
+
     const panel = element('section', 'answer-panel');
     panel.append(element('p', 'prompt', definition.prompt));
     const display = element('div', 'answer-display', session.answer || 'Your answer');
@@ -210,6 +226,7 @@ export class NumberNexusApp {
     panel.append(display);
     const feedback = element('div', 'feedback');
     panel.append(this.answerControls(definition, display), feedback);
+
     const actions = element('div', 'puzzle-actions');
     const hint = element('button', 'secondary-button', `Hint · ${this.saves.get().hintTokens}`);
     hint.addEventListener('click', () => this.revealHint(hint));
@@ -217,6 +234,7 @@ export class NumberNexusApp {
     submit.addEventListener('click', () => this.submit(feedback, display));
     actions.append(hint, submit);
     panel.append(actions);
+
     main.append(top, card, panel);
     this.root.append(main);
     this.scene = new PuzzleScene(host);
@@ -235,6 +253,7 @@ export class NumberNexusApp {
       this.audio.play('key');
       void this.haptics.light();
     };
+
     if (puzzle.answerMode === 'numeric-input') {
       const keypad = element('div', 'keypad');
       const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
@@ -259,6 +278,7 @@ export class NumberNexusApp {
       wrap.append(keypad);
       return wrap;
     }
+
     const choices = element('div', puzzle.answerMode === 'drag-and-drop' ? 'choice-grid draggable-choices' : 'choice-grid');
     (puzzle.choices ?? []).forEach((value) => {
       const text = String(value);
@@ -290,19 +310,54 @@ export class NumberNexusApp {
     }
     const save = this.saves.get();
     if (save.hintTokens <= 0) {
-      this.showDialog('No hint tokens', 'Solve daily puzzles, chapters, and star milestones to earn more.');
+      this.showRewardedHintOffer(button);
       return;
     }
+    this.revealHintNow(button, true);
+  }
+
+  private revealHintNow(button: HTMLButtonElement, consumeToken: boolean): void {
+    const session = this.session;
+    if (!session || session.revealedHints >= 3) return;
     const index = session.revealedHints;
     session.revealedHints += 1;
     session.hintsUsed += 1;
     const updated = this.saves.update((draft) => {
-      draft.hintTokens -= 1;
+      if (consumeToken) draft.hintTokens = Math.max(0, draft.hintTokens - 1);
       draft.statistics.totalHintsUsed += 1;
     });
     button.textContent = `Hint · ${updated.hintTokens}`;
     this.audio.play('hint');
     this.showDialog(`Hint ${index + 1}`, session.puzzle.hints[index]!.text);
+  }
+
+  private showRewardedHintOffer(button: HTMLButtonElement): void {
+    const content = element('div');
+    content.innerHTML = '<h2>No hint tokens</h2><p>You can keep playing without ads, or watch an optional rewarded ad to reveal one hint for this puzzle.</p>';
+    const actions = element('div', 'dialog-actions');
+    const cancel = element('button', 'secondary-button', 'Not now');
+    cancel.addEventListener('click', () => this.closeDialog());
+    const watch = element('button', 'primary-button', 'Watch Ad · Free Hint');
+    watch.addEventListener('click', () => void this.handleRewardedAction(watch, 'free-hint', () => {
+      this.closeDialog();
+      this.revealHintNow(button, false);
+    }));
+    actions.append(cancel, watch);
+    content.append(actions);
+    this.showDialogNode(content);
+  }
+
+  private async handleRewardedAction(button: HTMLButtonElement, placement: AdPlacement, reward: () => void): Promise<void> {
+    button.disabled = true;
+    button.textContent = 'Loading optional ad...';
+    const available = await this.ads.isRewardedAdAvailable();
+    if (!available) {
+      this.showDialog('Ad unavailable', 'The optional rewarded ad is not ready yet. Try again later.');
+      return;
+    }
+    const result = await this.ads.showRewardedAd(placement);
+    if (result.completed) reward();
+    else this.showDialog('Reward not granted', 'The reward is only granted after the optional ad is completed.');
   }
 
   private submit(feedback: HTMLElement, display: HTMLElement): void {
@@ -326,6 +381,7 @@ export class NumberNexusApp {
       void this.haptics.error();
       return;
     }
+
     session.solved = true;
     feedback.textContent = 'Correct!';
     feedback.className = 'feedback success';
@@ -334,8 +390,8 @@ export class NumberNexusApp {
     const oldStars = totalStars(before);
     const stars = starsForHints(session.hintsUsed);
     const today = localDateKey();
-    const chapter = PuzzleRegistry.chapter(session.puzzle.chapterId)!;
-    const chapterWasComplete = chapter.puzzles.every((item) => before.levels[item.id]?.completed);
+    const category = PuzzleRegistry.chapter(session.puzzle.chapterId)!;
+    const categoryWasComplete = category.puzzles.every((item) => before.levels[item.id]?.completed);
     const updated = this.saves.update((draft) => {
       const old = draft.levels[session.puzzle.id];
       draft.levels[session.puzzle.id] = {
@@ -359,24 +415,31 @@ export class NumberNexusApp {
       draft.currentStreak = streak.current;
       draft.longestStreak = Math.max(draft.longestStreak, streak.longest);
     });
-    const chapterNowComplete = chapter.puzzles.every((item) => updated.levels[item.id]?.completed);
+    const categoryNowComplete = category.puzzles.every((item) => updated.levels[item.id]?.completed);
     const newStars = totalStars(updated);
-    if (!chapterWasComplete && chapterNowComplete) {
-      this.saves.update((draft) => { draft.hintTokens += 2; });
+    if (!categoryWasComplete && categoryNowComplete) {
+      this.saves.update((draft) => { draft.hintTokens += 10; });
       this.audio.play('chapter');
     } else this.audio.play('correct');
-    if (Math.floor(newStars / 15) > Math.floor(oldStars / 15)) this.saves.update((draft) => { draft.hintTokens += 1; });
+    if (Math.floor(newStars / 50) > Math.floor(oldStars / 50)) this.saves.update((draft) => { draft.hintTokens += 1; });
     void this.haptics.success();
     this.scene?.celebrate();
-    window.setTimeout(() => this.solution(stars, chapterNowComplete && !chapterWasComplete), 350);
+    window.setTimeout(() => this.solution(stars, categoryNowComplete && !categoryWasComplete), 350);
   }
 
-  private solution(stars: number, chapterComplete: boolean): void {
+  private solution(stars: number, categoryComplete: boolean): void {
     const session = this.session;
     if (!session) return;
     const content = element('div', 'solution');
-    content.innerHTML = `<div class="success-mark">✓</div><small>${chapterComplete ? 'CHAPTER COMPLETE' : 'CONNECTION FOUND'}</small><h2>Correct</h2><div class="earned-stars">${formatStars(stars)}</div><p>${session.puzzle.explanation}</p><ol>${session.puzzle.solutionSteps.map((step) => `<li>${step}</li>`).join('')}</ol>`;
+    content.innerHTML = `<div class="success-mark">✓</div><small>${categoryComplete ? 'CATEGORY MASTERED' : 'CONNECTION FOUND'}</small><h2>Correct</h2><div class="earned-stars">${formatStars(stars)}</div><p>${session.puzzle.explanation}</p><ol>${session.puzzle.solutionSteps.map((step) => `<li>${step}</li>`).join('')}</ol>`;
     const actions = element('div', 'dialog-actions');
+    const bonus = element('button', 'secondary-button', 'Watch Ad · +2 Hints');
+    bonus.addEventListener('click', () => void this.handleRewardedAction(bonus, 'post-level-reward', () => {
+      const updated = this.saves.update((draft) => { draft.hintTokens += 2; });
+      bonus.textContent = `Reward claimed · ${updated.hintTokens} hints`;
+      bonus.disabled = true;
+      this.audio.play('unlock');
+    }));
     const select = element('button', 'secondary-button', 'Level Select');
     select.addEventListener('click', () => { this.closeDialog(); this.go({ screen: 'levels', chapterId: session.puzzle.chapterId }, true); });
     const replay = element('button', 'secondary-button', 'Replay');
@@ -389,7 +452,7 @@ export class NumberNexusApp {
       if (nextPuzzle && !session.daily) this.go({ screen: 'puzzle', puzzleId: nextPuzzle.id }, true);
       else this.go({ screen: 'menu' }, true);
     });
-    actions.append(select, replay, next);
+    actions.append(bonus, select, replay, next);
     content.append(actions);
     this.showDialogNode(content, false);
   }
@@ -397,9 +460,9 @@ export class NumberNexusApp {
   private progress(): void {
     const save = this.saves.get();
     const main = element('main', 'screen content-screen');
-    main.append(this.header('Progress', 'Every connection makes the next one clearer'));
+    main.append(this.header('Progress', 'Every category grows from Easy to Expert'));
     const overview = element('section', 'progress-overview');
-    overview.innerHTML = `<div class="progress-ring" style="--progress:${completionPercent(save) * 3.6}deg"><span>${completionPercent(save)}%</span></div><div><strong>${completedCount(save)} / 60</strong><span>Puzzles solved</span><strong>${totalStars(save)} / 180</strong><span>Stars earned</span></div>`;
+    overview.innerHTML = `<div class="progress-ring" style="--progress:${completionPercent(save) * 3.6}deg"><span>${completionPercent(save)}%</span></div><div><strong>${completedCount(save)} / ${PuzzleRegistry.all().length}</strong><span>Puzzles solved</span><strong>${totalStars(save)} / ${MAX_STARS}</strong><span>Stars earned</span></div>`;
     const stats = element('section', 'stats-grid');
     const values: Array<[string, string]> = [
       [String(save.statistics.solvedWithoutHints), 'Solved without hints'],
@@ -412,7 +475,7 @@ export class NumberNexusApp {
     const chapters = element('section', 'chapter-progress-list');
     PuzzleRegistry.chapters().forEach((chapter) => {
       const result = chapterProgress(save, chapter.id);
-      chapters.append(progressBar(result.completed, 10, `${chapter.number}. ${chapter.title} · ${result.stars}/30 ★`));
+      chapters.append(progressBar(result.completed, chapter.puzzles.length, `${chapter.title} · ${result.completed}/${chapter.puzzles.length} · ${result.stars}/${chapter.puzzles.length * 3} ★`));
     });
     main.append(overview, stats, chapters);
     this.root.append(main);
@@ -440,9 +503,9 @@ export class NumberNexusApp {
       ['highContrast', 'High contrast', 'Strengthen borders and text separation'],
       ['largeText', 'Large text', 'Increase interface text size']
     ];
-    toggles.forEach(([key, title, description]) => {
+    toggles.forEach(([key, titleText, description]) => {
       const row = element('label', 'setting-row toggle-row');
-      const copy = element('span'); copy.innerHTML = `<strong>${title}</strong><small>${description}</small>`;
+      const copy = element('span'); copy.innerHTML = `<strong>${titleText}</strong><small>${description}</small>`;
       const input = element('input'); input.type = 'checkbox'; input.checked = save.settings[key];
       input.addEventListener('change', () => {
         const updated = this.saves.update((draft) => { draft.settings[key] = input.checked; });
@@ -466,9 +529,9 @@ export class NumberNexusApp {
 
   private about(): void {
     const main = element('main', 'screen content-screen');
-    main.append(this.header('About', 'Number Nexus · Version 1.0.0'));
+    main.append(this.header('About', 'Number Nexus · Version 1.1.0'));
     const card = element('section', 'about-card');
-    card.innerHTML = '<div class="brand-mark small"><span>+</span></div><h2>Connect the pattern.</h2><p>Number Nexus is an original, offline-first collection of sixty handcrafted mathematical logic puzzles for phones and tablets.</p><h3>Privacy</h3><p>No account is required. Progress and settings stay on this device. The initial release contains no analytics, advertising SDK, or remote tracking.</p><h3>Accessibility</h3><p>Large text, high contrast, reduced motion, optional sound, and optional vibration are available in Settings.</p><h3>Credits</h3><p>Design, puzzle system, procedural visuals, and programmatic audio were created specifically for Number Nexus. No third-party game art or copied puzzle screens are included.</p>';
+    card.innerHTML = '<div class="brand-mark small"><span>+</span></div><h2>Connect the pattern.</h2><p>Number Nexus is an original, offline-first collection of 1,920 mathematical logic puzzles across six unlocked categories. Each category progresses from Easy to Normal, Advanced, and Expert.</p><h3>Monetization</h3><p>The game only uses optional rewarded-ad buttons for extra hints or bonuses. No forced ads are required to play, solve, or unlock categories. The current implementation uses a mock provider ready for AdMob integration.</p><h3>Privacy</h3><p>No account is required. Progress and settings stay on this device. Real ad SDKs are not bundled until you intentionally connect a provider.</p><h3>Accessibility</h3><p>Large text, high contrast, reduced motion, optional sound, and optional vibration are available in Settings.</p><h3>Credits</h3><p>Design, puzzle system, procedural visuals, and generated puzzle logic were created specifically for Number Nexus. No copied puzzle screens are included.</p>';
     main.append(card);
     this.root.append(main);
   }
@@ -492,9 +555,9 @@ export class NumberNexusApp {
     this.root.append(main);
   }
 
-  private showDialog(title: string, message: string): void {
+  private showDialog(titleText: string, message: string): void {
     const content = element('div');
-    content.append(element('h2', '', title), element('p', '', message));
+    content.append(element('h2', '', titleText), element('p', '', message));
     const close = element('button', 'primary-button', 'Got it'); close.addEventListener('click', () => this.closeDialog());
     content.append(close); this.showDialogNode(content);
   }
