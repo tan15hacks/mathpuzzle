@@ -1,6 +1,7 @@
 import type {
   AnswerMode,
   DiagramPuzzleData,
+  DifficultyBand,
   PuzzleDefinition,
   PuzzleHint,
   PuzzleType
@@ -21,6 +22,8 @@ interface BaseArgs {
   prompt: string;
   answerMode?: AnswerMode;
   difficulty: 1 | 2 | 3 | 4 | 5;
+  difficultyBand?: DifficultyBand;
+  signature?: string;
   answer: string | number | Array<string | number>;
   choices?: Array<string | number>;
   explanation: string;
@@ -39,6 +42,8 @@ export const make = (args: BaseArgs, puzzleData: PuzzleDefinition['puzzleData'])
   prompt: args.prompt,
   answerMode: args.answerMode ?? 'numeric-input',
   difficulty: args.difficulty,
+  difficultyBand: args.difficultyBand,
+  signature: args.signature,
   puzzleData,
   correctAnswers: Array.isArray(args.answer) ? args.answer : [args.answer],
   choices: args.choices,
