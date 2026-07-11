@@ -1,0 +1,133 @@
+import type { GameSave } from './SaveTypes';
+
+const STORAGE_KEY = 'number-nexus-save';
+const SCHEMA_VERSION = 2 as const;
+
+export function createDefaultSave(now = new Date()): GameSave {
+  const timestamp = now.toISOString();
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    appVersion: '1.0.0',
+    levels: {},
+    hintTokens: 6,
+    lastPlayedLevel: 'chapter-1-level-1',
+    dailyCompletedDates: [],
+    dailyRewardDates: [],
+    currentStreak: 0,
+    longestStreak: 0,
+    settings: {
+      musicVolume: 0,
+      soundVolume: 0.8,
+      vibration: true,
+      reducedMotion: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false,
+      highContrast: false,
+      largeText: false
+    },
+    statistics: {
+      totalAttempts: 0,
+      totalHintsUsed: 0,
+      solvedWithoutHints: 0,
+      dailySolved: 0
+    },
+    createdAt: timestamp,
+    updatedAt: timestamp
+  };
+}
+
+interface LegacySave {
+  schemaVersion?: number;
+  progress?: Record<string, { stars?: number; completed?: boolean }>;
+  levels?: GameSave['levels'];
+  hintTokens?: number;
+  lastPlayedLevel?: string;
+  dailyCompletedDates?: string[];
+  dailyRewardDates?: string[];
+  currentStreak?: number;
+  longestStreak?: number;
+  settings?: Partial<GameSave['settings']>;
+  statistics?: Partial<GameSave['statistics']>;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export function migrateSave(raw: unknown): GameSave {
+  const defaults = createDefaultSave();
+  if (!raw || typeof raw !== 'object') return defaults;
+  const legacy = raw as LegacySave;
+  const migratedLevels = legacy.levels ?? Object.fromEntries(
+    Object.entries(legacy.progress ?? {}).map(([id, progress]) => [
+      id,
+      {
+        completed: progress.completed ?? false,
+        bestStars: Math.min(3, Math.max(0, progress.stars ?? 0)) as 0 | 1 | 2 | 3,
+        bestHintsUsed: 3,
+        attempts: 0
+      }
+    ])
+  );
+
+  return {
+    ...defaults,
+    ...legacy,
+    schemaVersion: SCHEMA_VERSION,
+    appVersion: '1.0.0',
+    levels: migratedLevels,
+    settings: { ...defaults.settings, ...legacy.settings },
+    statistics: { ...defaults.statistics, ...legacy.statistics },
+    dailyCompletedDates: [...new Set(legacy.dailyCompletedDates ?? [])],
+    dailyRewardDates: [...new Set(legacy.dailyRewardDates ?? [])],
+    updatedAt: new Date().toISOString()
+  };
+}
+
+export class SaveManager {
+  private save: GameSave;
+  private listeners = new Set<(save: GameSave) => void>();
+
+  constructor() {
+    this.save = this.load();
+  }
+
+  get(): GameSave {
+    return structuredClone(this.save);
+  }
+
+  update(mutator: (draft: GameSave) => void): GameSave {
+    const draft = structuredClone(this.save);
+    mutator(draft);
+    draft.updatedAt = new Date().toISOString();
+    this.save = draft;
+    this.persist();
+    this.listeners.forEach((listener) => listener(this.get()));
+    return this.get();
+  }
+
+  subscribe(listener: (save: GameSave) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  reset(): GameSave {
+    this.save = createDefaultSave();
+    this.persist();
+    this.listeners.forEach((listener) => listener(this.get()));
+    return this.get();
+  }
+
+  private load(): GameSave {
+    try {
+      const serialized = localStorage.getItem(STORAGE_KEY);
+      return serialized ? migrateSave(JSON.parse(serialized) as unknown) : createDefaultSave();
+    } catch {
+      return createDefaultSave();
+    }
+  }
+
+  private persist(): void {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.save));
+    } catch (error) {
+      console.error('Unable to save Number Nexus progress.', error);
+    }
+  }
+}
