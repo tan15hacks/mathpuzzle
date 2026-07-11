@@ -15,30 +15,38 @@ describe('progression', () => {
     expect(starsForHints(9)).toBe(1);
   });
 
-  it('unlocks only the first puzzle initially', () => {
+  it('unlocks every category initially but only level one inside each category', () => {
     const save = createDefaultSave();
-    expect(isPuzzleUnlocked(save, 'chapter-1-level-1')).toBe(true);
-    expect(isPuzzleUnlocked(save, 'chapter-1-level-2')).toBe(false);
-    save.levels['chapter-1-level-1'] = {
+    expect(isChapterUnlocked(save, 'category-sequences')).toBe(true);
+    expect(isChapterUnlocked(save, 'category-shapes')).toBe(true);
+    expect(isPuzzleUnlocked(save, 'category-sequences-level-1')).toBe(true);
+    expect(isPuzzleUnlocked(save, 'category-shapes-level-1')).toBe(true);
+    expect(isPuzzleUnlocked(save, 'category-sequences-level-2')).toBe(false);
+  });
+
+  it('unlocks the next level only inside the same category', () => {
+    const save = createDefaultSave();
+    save.levels['category-sequences-level-1'] = {
       completed: true,
       bestStars: 3,
       bestHintsUsed: 0,
       attempts: 1
     };
-    expect(isPuzzleUnlocked(save, 'chapter-1-level-2')).toBe(true);
+    expect(isPuzzleUnlocked(save, 'category-sequences-level-2')).toBe(true);
+    expect(isPuzzleUnlocked(save, 'category-sequences-level-3')).toBe(false);
+    expect(isPuzzleUnlocked(save, 'category-shapes-level-2')).toBe(false);
   });
 
-  it('unlocks the next chapter after ten completions', () => {
+  it('calculates completion across the full 1,920-level library', () => {
     const save = createDefaultSave();
-    for (let level = 1; level <= 10; level += 1) {
-      save.levels[`chapter-1-level-${level}`] = {
+    for (let level = 1; level <= 320; level += 1) {
+      save.levels[`category-sequences-level-${level}`] = {
         completed: true,
         bestStars: 3,
         bestHintsUsed: 0,
         attempts: 1
       };
     }
-    expect(isChapterUnlocked(save, 'chapter-2')).toBe(true);
     expect(completionPercent(save)).toBe(17);
   });
 });
