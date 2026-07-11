@@ -1,6 +1,7 @@
 import { registerSW } from 'virtual:pwa-register';
 import { NumberNexusApp } from './app/App';
 import './styles.css';
+import './gameplay-polish.css';
 
 registerSW({
   immediate: true,
