@@ -46,8 +46,8 @@ interface LegacySave {
   dailyRewardDates?: string[];
   currentStreak?: number;
   longestStreak?: number;
-  settings?: Partial<GameSave['settings'];>
-  statistics?: Partial<GameSave['statistics'];>
+  settings?: Partial<GameSave['settings']>;
+  statistics?: Partial<GameSave['statistics']>;
   createdAt?: string;
   updatedAt?: string;
 }
