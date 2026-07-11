@@ -5,8 +5,11 @@ export interface TextSpriteOptions {
   background?: string;
   border?: string;
   fontSize?: number;
+  fontWeight?: number;
   padding?: number;
   scale?: number;
+  boxWidth?: number;
+  boxHeight?: number;
 }
 
 export class ThreeRenderer {
@@ -84,28 +87,29 @@ export class ThreeRenderer {
 
   createTextSprite(text: string, options: TextSpriteOptions = {}): THREE.Sprite {
     const fontSize = options.fontSize ?? 62;
+    const fontWeight = options.fontWeight ?? 750;
     const padding = options.padding ?? 24;
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d');
     if (!context) throw new Error('Canvas 2D context is unavailable.');
 
-    context.font = `600 ${fontSize}px system-ui, sans-serif`;
+    context.font = `${fontWeight} ${fontSize}px Inter, system-ui, sans-serif`;
     const metrics = context.measureText(text);
-    canvas.width = Math.ceil(metrics.width + padding * 2);
-    canvas.height = Math.ceil(fontSize * 1.55 + padding * 2);
-    context.font = `600 ${fontSize}px system-ui, sans-serif`;
+    canvas.width = options.boxWidth ?? Math.ceil(metrics.width + padding * 2);
+    canvas.height = options.boxHeight ?? Math.ceil(fontSize * 1.55 + padding * 2);
+    context.font = `${fontWeight} ${fontSize}px Inter, system-ui, sans-serif`;
     context.textAlign = 'center';
     context.textBaseline = 'middle';
 
     if (options.background) {
       context.fillStyle = options.background;
-      roundRect(context, 2, 2, canvas.width - 4, canvas.height - 4, canvas.height * 0.22);
+      roundRect(context, 3, 3, canvas.width - 6, canvas.height - 6, Math.min(24, canvas.height * 0.28));
       context.fill();
     }
     if (options.border) {
       context.strokeStyle = options.border;
       context.lineWidth = 5;
-      roundRect(context, 3, 3, canvas.width - 6, canvas.height - 6, canvas.height * 0.22);
+      roundRect(context, 4, 4, canvas.width - 8, canvas.height - 8, Math.min(24, canvas.height * 0.28));
       context.stroke();
     }
 
