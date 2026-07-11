@@ -11,7 +11,9 @@ export const PuzzleRegistry = {
   chapter: (id: string): ChapterDefinition | undefined => chapterMap.get(id),
   first: (): PuzzleDefinition => allPuzzles[0]!,
   next: (id: string): PuzzleDefinition | undefined => {
-    const index = allPuzzles.findIndex((puzzle) => puzzle.id === id);
-    return index >= 0 ? allPuzzles[index + 1] : undefined;
+    const current = puzzleMap.get(id);
+    if (!current) return undefined;
+    const category = chapterMap.get(current.chapterId);
+    return category?.puzzles.find((puzzle) => puzzle.levelNumber === current.levelNumber + 1);
   }
 };
