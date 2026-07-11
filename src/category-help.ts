@@ -98,7 +98,9 @@ export function installCategoryHelp(): void {
 
 function enhanceCategoryCards(root: HTMLElement): void {
   const screen = root.querySelector<HTMLElement>('main.content-screen');
-  const title = screen?.querySelector<HTMLElement>('.screen-header h1')?.textContent?.trim();
+  if (!screen) return;
+
+  const title = screen.querySelector<HTMLElement>('.screen-header h1')?.textContent?.trim();
   if (title !== 'Categories') return;
 
   screen.querySelectorAll<HTMLButtonElement>('.chapter-card').forEach((card) => {
