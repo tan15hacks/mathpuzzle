@@ -20,6 +20,8 @@ export type AnswerMode =
   | 'drag-and-drop'
   | 'operator-selection';
 
+export type DifficultyBand = 'easy' | 'normal' | 'advanced' | 'expert';
+
 export interface PuzzleHint {
   text: string;
   level: 1 | 2 | 3;
@@ -93,12 +95,19 @@ export interface PuzzleDefinition {
   prompt: string;
   answerMode: AnswerMode;
   difficulty: 1 | 2 | 3 | 4 | 5;
+  difficultyBand?: DifficultyBand;
+  signature?: string;
+
   puzzleData: PuzzleData;
+
   correctAnswers: Array<string | number>;
   choices?: Array<string | number>;
+
   explanation: string;
   solutionSteps: string[];
+
   hints: [PuzzleHint, PuzzleHint, PuzzleHint];
+
   allowNegative?: boolean;
   allowDecimal?: boolean;
   numericTolerance?: number;
