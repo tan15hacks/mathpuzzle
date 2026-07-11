@@ -14,12 +14,13 @@ export interface RewardedAdProvider {
 export class MockRewardedAdProvider implements RewardedAdProvider {
   private ready = false;
 
-  async initialize(): Promise<void> {
+  initialize(): Promise<void> {
     this.ready = true;
+    return Promise.resolve();
   }
 
-  async isRewardedAdAvailable(): Promise<boolean> {
-    return this.ready;
+  isRewardedAdAvailable(): Promise<boolean> {
+    return Promise.resolve(this.ready);
   }
 
   async showRewardedAd(placement: AdPlacement): Promise<RewardResult> {
