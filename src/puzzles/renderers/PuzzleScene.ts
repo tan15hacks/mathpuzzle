@@ -5,6 +5,7 @@ import type {
   DiagramPuzzleData,
   GridPuzzleData,
   PuzzleDefinition,
+  PuzzleType,
   SequencePuzzleData
 } from '../PuzzleTypes';
 
@@ -13,6 +14,12 @@ const GOLD = '#F0BF59';
 const MUTED = '#637184';
 const NODE_BG = '#172132';
 const NODE_TEXT = '#F8FBFF';
+
+interface SymbolEquationRow {
+  left: string;
+  right: string;
+  missing: boolean;
+}
 
 export class PuzzleScene {
   private readonly engine: ThreeRenderer;
@@ -43,7 +50,7 @@ export class PuzzleScene {
         this.renderCounting(puzzle.puzzleData);
         break;
       case 'diagram':
-        this.renderDiagram(puzzle.puzzleData);
+        this.renderDiagram(puzzle.puzzleData, puzzle.type);
         break;
     }
   }
@@ -127,7 +134,9 @@ export class PuzzleScene {
     }
   }
 
-  private renderDiagram(data: DiagramPuzzleData): void {
+  private renderDiagram(data: DiagramPuzzleData, type: PuzzleType): void {
+    if (type === 'symbol-value' && this.renderSymbolEquationRows(data)) return;
+
     data.lines?.forEach((line) => this.addLine(line.from, line.to, line.dashed ? GOLD : MUTED));
     data.circles?.forEach((circle) => {
       const curve = new THREE.EllipseCurve(circle.x, circle.y, circle.radius, circle.radius, 0, Math.PI * 2);
@@ -161,6 +170,72 @@ export class PuzzleScene {
       this.engine.scene.add(sprite);
       if (isMissing) this.animated.push(sprite);
     });
+  }
+
+  private renderSymbolEquationRows(data: DiagramPuzzleData): boolean {
+    const rows = data.labels
+      .map((label) => this.parseSymbolEquation(label.text))
+      .filter((row): row is SymbolEquationRow => row !== null);
+
+    if (rows.length !== data.labels.length || rows.length < 2) return false;
+
+    const rowSpacing = rows.length <= 3 ? 1.08 : 0.92;
+    const startY = ((rows.length - 1) * rowSpacing) / 2;
+    rows.forEach((row, index) => this.addSymbolEquationRow(row, startY - index * rowSpacing));
+    return true;
+  }
+
+  private parseSymbolEquation(text: string): SymbolEquationRow | null {
+    const parts = text.split('=');
+    if (parts.length !== 2) return null;
+    const left = parts[0]?.trim();
+    const right = parts[1]?.trim();
+    if (!left || !right) return null;
+    return { left, right, missing: left.includes('?') || right.includes('?') };
+  }
+
+  private addSymbolEquationRow(row: SymbolEquationRow, y: number): void {
+    const group = new THREE.Group();
+    const left = this.engine.createTextSprite(row.left, {
+      color: row.missing ? ACCENT : NODE_TEXT,
+      fontSize: row.left.length > 3 ? 54 : 60,
+      fontWeight: 850,
+      padding: 0,
+      boxWidth: 270,
+      boxHeight: 96,
+      scale: 0.58
+    });
+    const equals = this.engine.createTextSprite('=', {
+      color: 'rgba(248, 251, 255, 0.78)',
+      fontSize: 54,
+      fontWeight: 800,
+      padding: 0,
+      boxWidth: 70,
+      boxHeight: 96,
+      scale: 0.52
+    });
+    const right = this.engine.createTextSprite(row.right, {
+      color: row.missing ? GOLD : NODE_TEXT,
+      background: row.missing ? NODE_BG : undefined,
+      border: row.missing ? GOLD : undefined,
+      fontSize: 60,
+      fontWeight: 850,
+      padding: 0,
+      boxWidth: 150,
+      boxHeight: 96,
+      scale: row.missing ? 0.66 : 0.58
+    });
+
+    left.position.set(-0.92, 0, 0.02);
+    equals.position.set(0.08, 0, 0.02);
+    right.position.set(0.92, 0, 0.02);
+    group.position.set(0, y, 0);
+    group.add(left, equals, right);
+    this.engine.scene.add(group);
+
+    if (row.missing) {
+      this.animated.push(right);
+    }
   }
 
   private nodeSprite(text: string, missing: boolean, scale = 0.68): THREE.Sprite {
