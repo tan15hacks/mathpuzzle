@@ -88,9 +88,10 @@ export function installCategoryHelp(): void {
   if (installed) return;
   installed = true;
 
-  const root = document.querySelector<HTMLElement>('#app') ?? document.body;
-  const enhance = (): void => enhanceCategoryCards(root);
+  const root = document.getElementById('app');
+  if (!root) return;
 
+  const enhance = (): void => enhanceCategoryCards(root);
   enhance();
   new MutationObserver(enhance).observe(root, { childList: true, subtree: true });
 }
@@ -107,15 +108,14 @@ function enhanceCategoryCards(root: HTMLElement): void {
     const guide = GUIDES[categoryTitle];
     if (!guide) return;
 
-    const existingWrapper = card.parentElement?.classList.contains('category-card-wrap') ? card.parentElement : null;
-    if (existingWrapper?.querySelector('.category-help-button')) return;
+    const parent = card.parentElement;
+    if (!parent) return;
 
-    const wrapper = existingWrapper ?? document.createElement('div');
+    const wrapper = parent.classList.contains('category-card-wrap') ? parent : document.createElement('div');
+    if (wrapper.querySelector('.category-help-button')) return;
+
     wrapper.className = 'category-card-wrap';
-
-    if (!existingWrapper) {
-      const parent = card.parentElement;
-      if (!parent) return;
+    if (wrapper !== parent) {
       parent.insertBefore(wrapper, card);
       wrapper.append(card);
     }
@@ -162,9 +162,9 @@ function openCategoryGuide(guide: CategoryGuide): void {
   label.className = 'category-guide-label';
   label.textContent = 'HOW TO PLAY';
 
-  const title = document.createElement('h2');
-  title.id = 'category-guide-title';
-  title.textContent = guide.title;
+  const heading = document.createElement('h2');
+  heading.id = 'category-guide-title';
+  heading.textContent = guide.title;
 
   const summary = document.createElement('p');
   summary.className = 'category-guide-summary';
@@ -192,7 +192,7 @@ function openCategoryGuide(guide: CategoryGuide): void {
   action.textContent = 'Got it';
   action.addEventListener('click', () => overlay.remove());
 
-  dialog.append(close, icon, label, title, summary, goal, list, tip, action);
+  dialog.append(close, icon, label, heading, summary, goal, list, tip, action);
   overlay.append(dialog);
   overlay.addEventListener('pointerdown', (event) => {
     if (event.target === overlay) overlay.remove();
