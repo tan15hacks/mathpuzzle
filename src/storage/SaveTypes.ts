@@ -20,10 +20,11 @@ export interface GameStatistics {
   totalHintsUsed: number;
   solvedWithoutHints: number;
   dailySolved: number;
+  rewardedAdsWatched: number;
 }
 
 export interface GameSave {
-  schemaVersion: 2;
+  schemaVersion: 3;
   appVersion: string;
   levels: Record<string, LevelProgress>;
   hintTokens: number;

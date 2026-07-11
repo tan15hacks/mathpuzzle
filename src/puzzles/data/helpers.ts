@@ -1,6 +1,7 @@
 import type {
   AnswerMode,
   DiagramPuzzleData,
+  DifficultyTier,
   PuzzleDefinition,
   PuzzleHint,
   PuzzleType
@@ -15,12 +16,15 @@ export const hints = (a: string, b: string, c: string): [PuzzleHint, PuzzleHint,
 interface BaseArgs {
   id: string;
   chapterId: string;
+  categoryId?: string;
   levelNumber: number;
   title: string;
   type: PuzzleType;
   prompt: string;
   answerMode?: AnswerMode;
   difficulty: 1 | 2 | 3 | 4 | 5;
+  difficultyTier?: DifficultyTier;
+  uniquenessKey?: string;
   answer: string | number | Array<string | number>;
   choices?: Array<string | number>;
   explanation: string;
@@ -30,8 +34,19 @@ interface BaseArgs {
   allowDecimal?: boolean;
 }
 
-export const make = (args: BaseArgs, puzzleData: PuzzleDefinition['puzzleData']): PuzzleDefinition => ({
+function tierFromDifficulty(difficulty: BaseArgs['difficulty']): DifficultyTier {
+  if (difficulty <= 1) return 'easy';
+  if (difficulty === 2) return 'normal';
+  if (difficulty <= 4) return 'advanced';
+  return 'expert';
+}
+
+export const make = (
+  args: BaseArgs,
+  puzzleData: PuzzleDefinition['puzzleData']
+): PuzzleDefinition => ({
   id: args.id,
+  categoryId: args.categoryId ?? args.chapterId,
   chapterId: args.chapterId,
   levelNumber: args.levelNumber,
   title: args.title,
@@ -39,6 +54,7 @@ export const make = (args: BaseArgs, puzzleData: PuzzleDefinition['puzzleData'])
   prompt: args.prompt,
   answerMode: args.answerMode ?? 'numeric-input',
   difficulty: args.difficulty,
+  difficultyTier: args.difficultyTier ?? tierFromDifficulty(args.difficulty),
   puzzleData,
   correctAnswers: Array.isArray(args.answer) ? args.answer : [args.answer],
   choices: args.choices,
@@ -46,16 +62,22 @@ export const make = (args: BaseArgs, puzzleData: PuzzleDefinition['puzzleData'])
   solutionSteps: args.steps,
   hints: args.hints,
   allowNegative: args.allowNegative,
-  allowDecimal: args.allowDecimal
+  allowDecimal: args.allowDecimal,
+  uniquenessKey: args.uniquenessKey ?? args.id
 });
 
-export const sequence = (args: BaseArgs, values: Array<number | string | null>): PuzzleDefinition =>
-  make(args, { kind: 'sequence', values });
+export const sequence = (
+  args: BaseArgs,
+  values: Array<number | string | null>
+): PuzzleDefinition => make(args, { kind: 'sequence', values });
 
-export const grid = (args: BaseArgs, cells: Array<Array<number | string | null>>): PuzzleDefinition =>
-  make(args, { kind: 'grid', cells });
+export const grid = (
+  args: BaseArgs,
+  cells: Array<Array<number | string | null>>
+): PuzzleDefinition => make(args, { kind: 'grid', cells });
 
-export const diagram = (args: BaseArgs, data: DiagramPuzzleData): PuzzleDefinition => make(args, data);
+export const diagram = (args: BaseArgs, data: DiagramPuzzleData): PuzzleDefinition =>
+  make(args, data);
 
 export const equationDiagram = (lines: string[]): DiagramPuzzleData => ({
   kind: 'diagram',
@@ -79,7 +101,12 @@ export const triangleGroups = (
     labels.push(
       { text: String(group[0]), x: x - 0.65, y: 0.8, style: 'node' },
       { text: String(group[1]), x: x + 0.65, y: 0.8, style: 'node' },
-      { text: group[2] === null ? '?' : String(group[2]), x, y: -0.8, style: group[2] === null ? 'missing' : 'node' }
+      {
+        text: group[2] === null ? '?' : String(group[2]),
+        x,
+        y: -0.8,
+        style: group[2] === null ? 'missing' : 'node'
+      }
     );
     lines.push(
       { from: [x - 0.52, 0.52], to: [x, -0.52] },
@@ -91,7 +118,9 @@ export const triangleGroups = (
   return { kind: 'diagram', labels, lines };
 };
 
-export const inputOutput = (pairs: Array<[number | string, number | string | null]>): DiagramPuzzleData => ({
+export const inputOutput = (
+  pairs: Array<[number | string, number | string | null]>
+): DiagramPuzzleData => ({
   kind: 'diagram',
   labels: pairs.flatMap(([input, output], index) => {
     const y = (pairs.length - 1) * 0.75 - index * 1.5;

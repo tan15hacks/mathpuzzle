@@ -20,6 +20,8 @@ export type AnswerMode =
   | 'drag-and-drop'
   | 'operator-selection';
 
+export type DifficultyTier = 'easy' | 'normal' | 'advanced' | 'expert';
+
 export interface PuzzleHint {
   text: string;
   level: 1 | 2 | 3;
@@ -86,13 +88,19 @@ export type PuzzleData =
 
 export interface PuzzleDefinition {
   id: string;
-  chapterId: string;
+  categoryId: string;
+  /**
+   * Kept only so save migrations and the original sixty-level data files remain
+   * type-compatible. New content uses categoryId.
+   */
+  chapterId?: string;
   levelNumber: number;
   title: string;
   type: PuzzleType;
   prompt: string;
   answerMode: AnswerMode;
   difficulty: 1 | 2 | 3 | 4 | 5;
+  difficultyTier: DifficultyTier;
   puzzleData: PuzzleData;
   correctAnswers: Array<string | number>;
   choices?: Array<string | number>;
@@ -102,9 +110,14 @@ export interface PuzzleDefinition {
   allowNegative?: boolean;
   allowDecimal?: boolean;
   numericTolerance?: number;
+  /**
+   * A deterministic signature for duplicate detection. It includes the rule
+   * family and the generated parameters, not merely the level number.
+   */
+  uniquenessKey: string;
 }
 
-export interface ChapterDefinition {
+export interface CategoryDefinition {
   id: string;
   number: number;
   title: string;
@@ -113,3 +126,6 @@ export interface ChapterDefinition {
   accent: string;
   puzzles: PuzzleDefinition[];
 }
+
+/** @deprecated Use CategoryDefinition. */
+export type ChapterDefinition = CategoryDefinition;
