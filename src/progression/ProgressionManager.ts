@@ -8,17 +8,16 @@ export function starsForHints(hintsUsed: number): 1 | 2 | 3 {
 }
 
 export function isPuzzleUnlocked(save: GameSave, puzzleId: string): boolean {
-  const puzzles = PuzzleRegistry.all();
-  const index = puzzles.findIndex((puzzle) => puzzle.id === puzzleId);
-  if (index <= 0) return index === 0;
-  return Boolean(save.levels[puzzles[index - 1]!.id]?.completed);
+  const puzzle = PuzzleRegistry.get(puzzleId);
+  if (!puzzle) return false;
+  if (puzzle.levelNumber === 1) return true;
+  const category = PuzzleRegistry.chapter(puzzle.chapterId);
+  const previous = category?.puzzles.find((item) => item.levelNumber === puzzle.levelNumber - 1);
+  return Boolean(previous && save.levels[previous.id]?.completed);
 }
 
-export function isChapterUnlocked(save: GameSave, chapterId: string): boolean {
-  const chapters = PuzzleRegistry.chapters();
-  const index = chapters.findIndex((chapter) => chapter.id === chapterId);
-  if (index <= 0) return index === 0;
-  return chapters[index - 1]!.puzzles.every((puzzle) => save.levels[puzzle.id]?.completed);
+export function isChapterUnlocked(_save: GameSave, chapterId: string): boolean {
+  return Boolean(PuzzleRegistry.chapter(chapterId));
 }
 
 export function getLevelProgress(save: GameSave, puzzleId: string): LevelProgress {
@@ -43,20 +42,24 @@ export function completionPercent(save: GameSave): number {
 }
 
 export function nextPlayablePuzzleId(save: GameSave): string {
+  const last = PuzzleRegistry.get(save.lastPlayedLevel);
+  if (last && isPuzzleUnlocked(save, last.id) && !save.levels[last.id]?.completed) return last.id;
+
   const puzzle = PuzzleRegistry.all().find((item) => isPuzzleUnlocked(save, item.id) && !save.levels[item.id]?.completed);
   return puzzle?.id ?? save.lastPlayedLevel ?? PuzzleRegistry.first().id;
 }
 
-export function chapterProgress(save: GameSave, chapterId: string): { completed: number; stars: number } {
+export function chapterProgress(save: GameSave, chapterId: string): { completed: number; stars: number; highestUnlocked: number } {
   const chapter = PuzzleRegistry.chapter(chapterId);
-  if (!chapter) return { completed: 0, stars: 0 };
+  if (!chapter) return { completed: 0, stars: 0, highestUnlocked: 0 };
   return chapter.puzzles.reduce(
     (result, puzzle) => {
       const progress = getLevelProgress(save, puzzle.id);
       result.completed += progress.completed ? 1 : 0;
       result.stars += progress.bestStars;
+      if (isPuzzleUnlocked(save, puzzle.id)) result.highestUnlocked = Math.max(result.highestUnlocked, puzzle.levelNumber);
       return result;
     },
-    { completed: 0, stars: 0 }
+    { completed: 0, stars: 0, highestUnlocked: 0 }
   );
 }
