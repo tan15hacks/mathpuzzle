@@ -10,7 +10,7 @@ export default defineConfig({
       manifest: {
         name: 'Number Nexus',
         short_name: 'Nexus',
-        description: 'A relaxing collection of original mathematical logic puzzles.',
+        description: '1,920 original mathematical logic puzzles across six progressive categories.',
         theme_color: '#151A24',
         background_color: '#F4F3EE',
         display: 'standalone',
@@ -30,7 +30,7 @@ export default defineConfig({
   build: {
     target: 'es2022',
     sourcemap: true,
-    chunkSizeWarningLimit: 750
+    chunkSizeWarningLimit: 900
   },
   test: {
     environment: 'jsdom',

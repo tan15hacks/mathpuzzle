@@ -1,7 +1,9 @@
+import type { DifficultyTier } from '../puzzles/PuzzleTypes';
+
 export type ScreenName =
   | 'splash'
   | 'menu'
-  | 'chapters'
+  | 'categories'
   | 'levels'
   | 'puzzle'
   | 'daily'
@@ -12,7 +14,8 @@ export type ScreenName =
 
 export interface Route {
   screen: ScreenName;
-  chapterId?: string;
+  categoryId?: string;
+  tier?: DifficultyTier;
   puzzleId?: string;
   daily?: boolean;
 }

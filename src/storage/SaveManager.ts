@@ -1,16 +1,24 @@
-import type { GameSave } from './SaveTypes';
+import type { GameSave, LevelProgress } from './SaveTypes';
 
 const STORAGE_KEY = 'number-nexus-save';
-const SCHEMA_VERSION = 2 as const;
+const SCHEMA_VERSION = 3 as const;
+const CATEGORY_ID_MAP: Record<string, string> = {
+  'chapter-1': 'number-patterns',
+  'chapter-2': 'shape-logic',
+  'chapter-3': 'equation-machines',
+  'chapter-4': 'grid-logic',
+  'chapter-5': 'number-rings',
+  'chapter-6': 'logic-mix'
+};
 
 export function createDefaultSave(now = new Date()): GameSave {
   const timestamp = now.toISOString();
   return {
     schemaVersion: SCHEMA_VERSION,
-    appVersion: '1.0.0',
+    appVersion: '1.1.0',
     levels: {},
     hintTokens: 6,
-    lastPlayedLevel: 'chapter-1-level-1',
+    lastPlayedLevel: 'number-patterns-level-1',
     dailyCompletedDates: [],
     dailyRewardDates: [],
     currentStreak: 0,
@@ -27,7 +35,8 @@ export function createDefaultSave(now = new Date()): GameSave {
       totalAttempts: 0,
       totalHintsUsed: 0,
       solvedWithoutHints: 0,
-      dailySolved: 0
+      dailySolved: 0,
+      rewardedAdsWatched: 0
     },
     createdAt: timestamp,
     updatedAt: timestamp
@@ -37,7 +46,7 @@ export function createDefaultSave(now = new Date()): GameSave {
 interface LegacySave {
   schemaVersion?: number;
   progress?: Record<string, { stars?: number; completed?: boolean }>;
-  levels?: GameSave['levels'];
+  levels?: Record<string, LevelProgress>;
   hintTokens?: number;
   lastPlayedLevel?: string;
   dailyCompletedDates?: string[];
@@ -50,11 +59,15 @@ interface LegacySave {
   updatedAt?: string;
 }
 
-export function migrateSave(raw: unknown): GameSave {
-  const defaults = createDefaultSave();
-  if (!raw || typeof raw !== 'object') return defaults;
-  const legacy = raw as LegacySave;
-  const migratedLevels = legacy.levels ?? Object.fromEntries(
+function migrateLevelId(id: string): string {
+  const match = /^chapter-([1-6])-level-(\d+)$/.exec(id);
+  if (!match) return id;
+  const categoryId = CATEGORY_ID_MAP[`chapter-${match[1]}`];
+  return categoryId ? `${categoryId}-level-${match[2]}` : id;
+}
+
+function migrateLevels(legacy: LegacySave): Record<string, LevelProgress> {
+  const source: Record<string, LevelProgress> = legacy.levels ?? Object.fromEntries(
     Object.entries(legacy.progress ?? {}).map(([id, progress]) => [
       id,
       {
@@ -66,12 +79,38 @@ export function migrateSave(raw: unknown): GameSave {
     ])
   );
 
+  const migrated: Record<string, LevelProgress> = {};
+  for (const [id, progress] of Object.entries(source)) {
+    const nextId = migrateLevelId(id);
+    const existing = migrated[nextId];
+    migrated[nextId] = existing
+      ? {
+          completed: existing.completed || progress.completed,
+          bestStars: Math.max(existing.bestStars, progress.bestStars) as 0 | 1 | 2 | 3,
+          bestHintsUsed: Math.min(existing.bestHintsUsed, progress.bestHintsUsed),
+          attempts: existing.attempts + progress.attempts,
+          completedAt: existing.completedAt ?? progress.completedAt
+        }
+      : progress;
+  }
+  return migrated;
+}
+
+export function migrateSave(raw: unknown): GameSave {
+  const defaults = createDefaultSave();
+  if (!raw || typeof raw !== 'object') return defaults;
+  const legacy = raw as LegacySave;
+  const migratedLastPlayed = migrateLevelId(
+    legacy.lastPlayedLevel ?? defaults.lastPlayedLevel
+  );
+
   return {
     ...defaults,
     ...legacy,
     schemaVersion: SCHEMA_VERSION,
-    appVersion: '1.0.0',
-    levels: migratedLevels,
+    appVersion: '1.1.0',
+    levels: migrateLevels(legacy),
+    lastPlayedLevel: migratedLastPlayed,
     settings: { ...defaults.settings, ...legacy.settings },
     statistics: { ...defaults.statistics, ...legacy.statistics },
     dailyCompletedDates: [...new Set(legacy.dailyCompletedDates ?? [])],
